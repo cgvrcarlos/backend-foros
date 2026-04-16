@@ -1,0 +1,291 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql" // or mysql, sqlite
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// FORO CIUDADANO MODELS (original)
+// =============================================================================
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String?
+  role      UserRole @default(USER)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Relations
+  posts     Post[]
+  comments  Comment[]
+  votes     Vote[]
+  attendances Attendance[]
+  responses  Response[]
+}
+
+enum UserRole {
+  USER
+  MODERATOR
+  ADMIN
+}
+
+model Post {
+  id        String   @id @default(uuid())
+  title     String
+  content   String
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  category  String?
+  status    PostStatus @default(PUBLISHED)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  // Relations
+  comments  Comment[]
+  votes     Vote[]
+}
+
+enum PostStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  content   String
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id])
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  parentId  String?
+  parent    Comment? @relation("CommentReplies", fields: [parentId], references: [id])
+  replies  Comment[] @relation("CommentReplies")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Vote {
+  id        String   @id @default(uuid())
+  value     Int      // 1 for up, -1 for down
+  postId    String?
+  post      Post?    @relation(fields: [postId], references: [id])
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime  @default(now())
+
+  @@unique([userId, postId])
+}
+
+// =============================================================================
+// EVENTPASS MODELS (from PRD-EventPass.md)
+// =============================================================================
+
+// Enums for EventPass
+enum Genero {
+  MASCULINO
+  FEMENINO
+  OTRO
+  NO_DICE
+}
+
+enum GradoEstudios {
+  PRIMARIA
+  SECUNDARIA
+  PREPARATORIA
+  LICENCIATURA
+  POSGRADO
+  OTRO
+}
+
+enum SituacionLaboral {
+  ESTUDIANTE
+  EMPLEADO
+  AUTOEMPLEADO
+  DESEMPLEADO
+  OTRO
+}
+
+enum TipoAsistencia {
+  PRESENCIAL
+  VIRTUAL
+}
+
+enum QuestionType {
+  OPCION_UNICA
+  MULTIPLE
+  ESCALA
+  ABIERTA_CORTO
+  ABIERTA_LARGO
+}
+
+enum Seccion {
+  ANALISIS
+  PROPUESTAS
+}
+
+enum AdminRole {
+  ADMIN
+  PONENTE
+}
+
+// Ponente (speaker del evento)
+model Ponente {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String   // bcrypt hashed
+  nombre    String
+  bio       String?
+  createdAt DateTime @default(now())
+
+  // Relations
+  ponencias Ponencia[]
+
+  @@index([email])
+}
+
+// Itinerario: relación entre ponente y evento con detalles de la ponencia
+model Ponencia {
+  id          String   @id @default(cuid())
+  ponenteId   String
+  eventoId    String
+  lugar       String   // Ubicación específica de la ponencia
+  horaInicio  String   // Formato HH:MM
+  horaFin     String   // Formato HH:MM
+  orden       Int      @default(0) // Orden de presentación
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relations
+  ponente     Ponente  @relation(fields: [ponenteId], references: [id], onDelete: Cascade)
+  evento      Event    @relation(fields: [eventoId], references: [id], onDelete: Cascade)
+
+  @@unique([ponenteId, eventoId]) // Un ponente tiene una sola relación por evento
+  @@index([eventoId])
+}
+
+// Evento del calendario
+model Event {
+  id                    String    @id @default(cuid())
+  titulo                String
+  descripcion           String?
+  fechaHora             DateTime
+  linkVirtual           String?
+  ubicacionPresencial   String?
+  publicado             Boolean   @default(false)
+  eliminado             Boolean   @default(false)
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  attendances           Attendance[]
+  survey                Survey?
+  ponencias             Ponencia[] // Relación a ponentes a través de Ponencia
+
+  @@index([publicado, eliminado])
+  @@index([fechaHora])
+}
+
+// Encuesta asociada a un evento
+model Survey {
+  id        String   @id @default(cuid())
+  eventId   String   @unique
+  titulo    String   @default("Encuesta de satisfacción")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relations
+  event     Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  questions Question[]
+  responses Response[]
+}
+
+// Pregunta dentro de una encuesta
+model Question {
+  id          String       @id @default(cuid())
+  surveyId    String
+  tipo        QuestionType
+  texto       String
+  opciones    String[]     // Para OPCION_UNICA y MULTIPLE
+  escalaMin   Int?         // Para ESCALA (default: 1)
+  escalaMax   Int?         // Para ESCALA (default: 5)
+  esRequerida Boolean      @default(false)
+  seccion     Seccion      @default(ANALISIS)
+  orden       Int          @default(0)
+  createdAt   DateTime     @default(now())
+
+  // Relations
+  survey      Survey       @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  answers     Answer[]
+
+  @@index([surveyId, orden])
+}
+
+// Confirmación de asistencia de un usuario a un evento
+model Attendance {
+  id            String         @id @default(cuid())
+  userId        String
+  eventId       String
+  tipoAsistencia TipoAsistencia @default(PRESENCIAL)
+  qrCode        String         @unique // Identificador único del QR
+  confirmedAt   DateTime       @default(now())
+
+  // Relations
+  user          User           @relation(fields: [userId], references: [id])
+  event         Event          @relation(fields: [eventId], references: [id])
+  response      Response?      // Respuesta de encuesta asociada
+
+  @@unique([userId, eventId]) // Solo una confirmación por usuario por evento
+  @@index([eventId, confirmedAt])
+}
+
+// Respuesta completa de encuesta por usuario
+model Response {
+  id           String    @id @default(cuid())
+  attendanceId String    @unique
+  surveyId     String
+  userId       String
+  submittedAt  DateTime  @default(now())
+
+  // Relations
+  attendance   Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
+  survey       Survey     @relation(fields: [surveyId], references: [id])
+  user         User       @relation(fields: [userId], references: [id])
+  answers      Answer[]
+
+  @@index([surveyId, submittedAt])
+}
+
+// Respuesta individual a una pregunta
+model Answer {
+  id          String   @id @default(cuid())
+  responseId  String
+  questionId  String
+  respuesta   Json     // string | string[] | int
+
+  // Relations
+  response    Response @relation(fields: [responseId], references: [id], onDelete: Cascade)
+  question    Question @relation(fields: [questionId], references: [id])
+
+  @@unique([responseId, questionId])
+}
+
+// Administrador del sistema
+model Admin {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  password  String     // bcrypt hashed
+  nombre    String
+  role      AdminRole  @default(PONENTE)
+  createdAt DateTime   @default(now())
+
+  @@index([email])
+}
