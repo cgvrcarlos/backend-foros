@@ -1,6 +1,7 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import helmet from 'helmet';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
@@ -9,37 +10,47 @@ async function bootstrap() {
     logger: ['error', 'warn', 'log', 'debug', 'verbose'],
   });
 
-  // Get config
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT') || 3001;
-  const corsOrigin = configService.get<string>('CORS_ORIGIN') || 'http://localhost:3000';
+  const allowedOrigins = configService
+    .get<string>('ALLOWED_ORIGINS', 'http://localhost:3000')
+    .split(',')
+    .map((o) => o.trim());
+
+  // Security headers
+  app.use(helmet());
 
   // Global validation pipe
   app.useGlobalPipes(
     new ValidationPipe({
-      whitelist: true, // Strip properties not in DTO
-      forbidNonWhitelisted: true, // Throw on extra properties
-      transform: true, // Transform payloads to DTO instances
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
       transformOptions: {
         enableImplicitConversion: true,
       },
     }),
   );
 
-  // Enable CORS
+  // CORS — whitelist from env
   app.enableCors({
-    origin: corsOrigin,
+    origin: (origin, callback) => {
+      // Allow requests without origin (server-to-server, curl)
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.includes(origin)) return callback(null, true);
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  // Global prefix for API routes
+  // Global prefix
   app.setGlobalPrefix('api');
 
-  await app.listen(port);
-  logger.log(`🚀 Backend running on http://localhost:${port}`);
-  logger.log(`📡 Events SSE: http://localhost:${port}/api/events/stream`);
+  await app.listen(port, '0.0.0.0');
+  logger.log(`Backend running on http://0.0.0.0:${port}`);
+  logger.log(`Allowed origins: ${allowedOrigins.join(', ')}`);
 }
 
 bootstrap();

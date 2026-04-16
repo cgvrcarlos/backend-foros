@@ -5,7 +5,7 @@ import { ConfigService } from '@nestjs/config';
 export interface JwtPayload {
   sub: string;
   email: string;
-  role: string;
+  role: 'USER' | 'ADMIN' | 'PONENTE';
 }
 
 @Injectable()
@@ -24,31 +24,27 @@ export class AuthJwtService implements OnModuleInit {
     }
   }
 
-  /**
-   * Generate JWT token for a user
-   */
-  generateToken(payload: JwtPayload): string {
-    return this.jwtService.sign(payload);
+  generateAccessToken(payload: JwtPayload): string {
+    return this.jwtService.sign(payload, { expiresIn: '1h' });
   }
 
-  /**
-   * Verify and decode JWT token
-   */
+  generateUserToken(payload: JwtPayload): string {
+    // Users get a longer token since they can't refresh (no password)
+    return this.jwtService.sign(payload, { expiresIn: '24h' });
+  }
+
+  generateRefreshToken(payload: JwtPayload): string {
+    return this.jwtService.sign(payload, { expiresIn: '7d' });
+  }
+
   verifyToken(token: string): JwtPayload {
     return this.jwtService.verify<JwtPayload>(token);
   }
 
-  /**
-   * Extract token from Authorization header
-   */
   extractTokenFromHeader(authHeader: string | undefined): string | null {
-    if (!authHeader) {
-      return null;
-    }
+    if (!authHeader) return null;
     const [type, token] = authHeader.split(' ');
-    if (type !== 'Bearer' || !token) {
-      return null;
-    }
+    if (type !== 'Bearer' || !token) return null;
     return token;
   }
 }
