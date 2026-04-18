@@ -9,7 +9,6 @@ build/
 *.tsbuildinfo
 
 # Prisma
-prisma/migrations/
 
 # Testing
 coverage/
