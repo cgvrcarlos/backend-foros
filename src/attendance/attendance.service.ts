@@ -68,7 +68,7 @@ export class AttendanceService {
       // Validar preguntas requeridas
       for (const rq of requiredQuestions) {
         const answered = dto.answers.find((a) => a.questionId === rq.id);
-        if (!answered || answered.respuesta === null || answered.respuesta === undefined) {
+        if (!answered || answered.answer === null || answered.answer === undefined) {
           throw new BadRequestException(
             `La pregunta requerida "${rq.texto}" no tiene respuesta`,
           );
@@ -89,7 +89,7 @@ export class AttendanceService {
         data: dto.answers.map((a) => ({
           responseId: response.id,
           questionId: a.questionId,
-          respuesta: a.respuesta,
+          answer: a.answer,
         })),
         skipDuplicates: true,
       });

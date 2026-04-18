@@ -1,4 +1,5 @@
 import { Controller, Get, Res, Logger } from '@nestjs/common';
+import { SkipThrottle } from '@nestjs/throttler';
 import type { Response } from 'express';
 import { EventsGateway } from './events.gateway';
 import { Public } from '../auth/decorators/public.decorator';
@@ -16,7 +17,8 @@ export class EventsController {
    * for real-time updates (new posts, comments, votes).
    */
   @Get('stream')
-  @Public() // Can be public or protected depending on requirements
+  @Public()
+  @SkipThrottle()
   async streamEvents(@Res() res: Response) {
     // Set SSE headers
     res.setHeader('Content-Type', 'text/event-stream');

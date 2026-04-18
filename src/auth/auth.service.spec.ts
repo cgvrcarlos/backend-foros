@@ -23,6 +23,7 @@ describe('AuthService', () => {
   };
 
   const mockRegisterDto: RegisterDto = {
+    password: 'Password123!',
     apaterno: 'García',
     amaterno: 'López',
     nombres: 'Juan',

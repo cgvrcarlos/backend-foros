@@ -6,6 +6,7 @@ import {
   IsString,
   Length,
   Matches,
+  MinLength,
 } from 'class-validator';
 
 export enum Genero {
@@ -33,6 +34,11 @@ export enum SituacionLaboral {
 }
 
 export class RegisterDto {
+  @IsString()
+  @IsNotEmpty()
+  @MinLength(8, { message: 'La contraseña debe tener al menos 8 caracteres' })
+  password: string;
+
   @IsString()
   @IsNotEmpty()
   @Length(2, 100)

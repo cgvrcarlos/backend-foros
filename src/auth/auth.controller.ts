@@ -28,7 +28,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ auth: { limit: 10, ttl: 15 * 60 * 1000 } })
+  @Throttle({ general: { limit: 10, ttl: 15 * 60 * 1000 } })
   @Post('login')
   @HttpCode(HttpStatus.OK)
   async login(@Body() dto: LoginDto) {
@@ -36,7 +36,7 @@ export class AuthController {
   }
 
   @Public()
-  @Throttle({ auth: { limit: 10, ttl: 15 * 60 * 1000 } })
+  @Throttle({ general: { limit: 10, ttl: 15 * 60 * 1000 } })
   @Post('refresh')
   @HttpCode(HttpStatus.OK)
   async refresh(@Body() dto: RefreshDto) {

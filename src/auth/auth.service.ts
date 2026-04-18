@@ -30,8 +30,11 @@ export class AuthService {
       throw new ConflictException('El email ya está registrado');
     }
 
+    const hashedPassword = await bcrypt.hash(dto.password, this.SALT_ROUNDS);
+
     const user = await this.prisma.user.create({
       data: {
+        password: hashedPassword,
         apaterno: dto.apaterno,
         amaterno: dto.amaterno,
         nombres: dto.nombres,
@@ -114,6 +117,22 @@ export class AuthService {
       };
     }
 
+    // Try regular User
+    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    if (user) {
+      if (!user.password) throw new UnauthorizedException('Credenciales inválidas');
+      const valid = await bcrypt.compare(dto.password, user.password);
+      if (!valid) throw new UnauthorizedException('Credenciales inválidas');
+
+      const payload: JwtPayload = { sub: user.id, email: user.email, role: 'USER' };
+      const accessToken = this.jwtService.generateUserToken(payload);
+
+      return {
+        accessToken,
+        user: this.sanitizeUser(user),
+      };
+    }
+
     throw new UnauthorizedException('Credenciales inválidas');
   }
 
@@ -174,7 +193,7 @@ export class AuthService {
   }
 
   private sanitizeUser(user: any) {
-    const { ...rest } = user;
+    const { password: _pw, ...rest } = user;
     return rest;
   }
 }

@@ -15,7 +15,7 @@ export class AnswerItemDto {
   questionId: string;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  respuesta: any;
+  answer: any;
 }
 
 export class ConfirmAttendanceDto {

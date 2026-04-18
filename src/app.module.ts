@@ -8,6 +8,7 @@ import { AuthModule } from './auth/auth.module';
 import { HealthModule } from './health/health.module';
 import { PrismaModule } from './prisma/prisma.module';
 import { RedisModule } from './redis/redis.module';
+import { EventsModule } from './events/events.module';
 import { EventsCrudModule } from './events-crud/events-crud.module';
 import { PonentesModule } from './ponentes/ponentes.module';
 import { SurveysModule } from './surveys/surveys.module';
@@ -27,15 +28,11 @@ import { UsersAdminModule } from './users-admin/users-admin.module';
         ttl: 15 * 60 * 1000, // 15 min
         limit: 100,
       },
-      {
-        name: 'auth',
-        ttl: 15 * 60 * 1000, // 15 min
-        limit: 10,
-      },
     ]),
     PrismaModule,
     RedisModule,
     AuthModule,
+    EventsModule,
     EventsCrudModule,
     PonentesModule,
     SurveysModule,

@@ -2,25 +2,19 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# Install OpenSSL for Prisma
+# OpenSSL (Prisma)
 RUN apt-get update && apt-get install -y openssl libssl3 && rm -rf /var/lib/apt/lists/*
 
-# Copy package files
 COPY package*.json ./
-
-# Install dependencies
 RUN npm install
 
-# Copy Prisma files
-COPY prisma ./prisma/
+COPY . .
+
 RUN npx prisma generate
+RUN npm run build
 
-# Copy source
-COPY dist ./dist/
-COPY package*.json ./
-
-# Expose port
 EXPOSE 3001
 
-# Start application
-CMD ["node", "dist/src/main.js"]
+RUN chmod +x docker-entrypoint.sh
+
+CMD ["./docker-entrypoint.sh"]
