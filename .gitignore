@@ -13,6 +13,11 @@ prisma/seed.js
 prisma/seed.js.map
 prisma/seed.d.ts
 
+# Scripts compiled artifacts
+scripts/*.js
+scripts/*.js.map
+scripts/*.d.ts
+
 # Testing
 coverage/
 
