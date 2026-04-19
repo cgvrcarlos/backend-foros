@@ -9,6 +9,9 @@ build/
 *.tsbuildinfo
 
 # Prisma
+prisma/seed.js
+prisma/seed.js.map
+prisma/seed.d.ts
 
 # Testing
 coverage/

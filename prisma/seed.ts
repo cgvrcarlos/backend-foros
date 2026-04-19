@@ -5,16 +5,23 @@ import * as bcrypt from 'bcryptjs';
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`Variable de entorno requerida: ${name}`);
+  return value;
+}
+
 async function main() {
   const SALT_ROUNDS = 12;
 
-  // Admin
-  const adminPassword = await bcrypt.hash('Admin1234!', SALT_ROUNDS);
+  // Admin — credenciales desde variables de entorno
+  const adminEmail = process.env.ADMIN_EMAIL ?? 'admin@eventpass.com';
+  const adminPassword = await bcrypt.hash(requireEnv('ADMIN_PASSWORD'), SALT_ROUNDS);
   const admin = await prisma.admin.upsert({
-    where: { email: 'admin@eventpass.com' },
+    where: { email: adminEmail },
     update: {},
     create: {
-      email: 'admin@eventpass.com',
+      email: adminEmail,
       password: adminPassword,
       nombre: 'Administrador',
       role: 'ADMIN',
@@ -23,7 +30,7 @@ async function main() {
   console.log('Admin creado:', admin.email);
 
   // Ponente de ejemplo
-  const ponentePassword = await bcrypt.hash('Ponente1234!', SALT_ROUNDS);
+  const ponentePassword = await bcrypt.hash(process.env.PONENTE_PASSWORD ?? 'Ponente1234!', SALT_ROUNDS);
   const ponente = await prisma.ponente.upsert({
     where: { email: 'ponente@eventpass.com' },
     update: {},
@@ -115,8 +122,8 @@ async function main() {
   console.log('Encuesta y preguntas creadas');
 
   console.log('\n✅ Seed completado exitosamente');
-  console.log('Admin:   admin@eventpass.com / Admin1234!');
-  console.log('Ponente: ponente@eventpass.com / Ponente1234!');
+  console.log(`Admin:   ${adminEmail}`);
+  console.log(`Ponente: ponente@eventpass.com`);
 }
 
 main()

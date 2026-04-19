@@ -1,5 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import * as bcrypt from 'bcryptjs';
+import { CreateAdminDto } from './dto/create-admin.dto';
 
 const USER_LIST_SELECT = {
   id: true,
@@ -25,9 +27,46 @@ function escapeCsvValue(value: string | null | undefined): string {
   return str;
 }
 
+const SALT_ROUNDS = 12;
+
 @Injectable()
 export class UsersAdminService {
   constructor(private readonly prisma: PrismaService) {}
+
+  async createAdmin(dto: CreateAdminDto) {
+    const existing = await this.prisma.admin.findUnique({ where: { email: dto.email } });
+    if (existing) throw new ConflictException('El email ya está registrado');
+
+    const hashedPassword = await bcrypt.hash(dto.password, SALT_ROUNDS);
+    const admin = await this.prisma.admin.create({
+      data: {
+        email: dto.email,
+        password: hashedPassword,
+        nombre: dto.nombre,
+        role: dto.role ?? 'ADMIN',
+      },
+      select: { id: true, email: true, nombre: true, role: true, createdAt: true },
+    });
+    return admin;
+  }
+
+  async changeAdminPassword(id: string, newPassword: string) {
+    const admin = await this.prisma.admin.findUnique({ where: { id } });
+    if (!admin) throw new NotFoundException(`Admin con id "${id}" no encontrado`);
+
+    const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+    await this.prisma.admin.update({
+      where: { id },
+      data: { password: hashedPassword },
+    });
+  }
+
+  async listAdmins() {
+    return this.prisma.admin.findMany({
+      select: { id: true, email: true, nombre: true, role: true, createdAt: true },
+      orderBy: { createdAt: 'asc' },
+    });
+  }
 
   async findAll(page = 1, limit = 50) {
     const skip = (page - 1) * limit;
