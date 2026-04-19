@@ -5,29 +5,29 @@ import * as bcrypt from 'bcryptjs';
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
-function requireEnv(name: string): string {
-  const value = process.env[name];
-  if (!value) throw new Error(`Variable de entorno requerida: ${name}`);
-  return value;
-}
-
 async function main() {
   const SALT_ROUNDS = 12;
 
-  // Admin — credenciales desde variables de entorno
+  // Admin — solo si ADMIN_PASSWORD está seteada
   const adminEmail = process.env.ADMIN_EMAIL ?? 'admin@eventpass.com';
-  const adminPassword = await bcrypt.hash(requireEnv('ADMIN_PASSWORD'), SALT_ROUNDS);
-  const admin = await prisma.admin.upsert({
-    where: { email: adminEmail },
-    update: {},
-    create: {
-      email: adminEmail,
-      password: adminPassword,
-      nombre: 'Administrador',
-      role: 'ADMIN',
-    },
-  });
-  console.log('Admin creado:', admin.email);
+  const adminRawPassword = process.env.ADMIN_PASSWORD;
+
+  if (adminRawPassword) {
+    const adminPassword = await bcrypt.hash(adminRawPassword, SALT_ROUNDS);
+    const admin = await prisma.admin.upsert({
+      where: { email: adminEmail },
+      update: {},
+      create: {
+        email: adminEmail,
+        password: adminPassword,
+        nombre: 'Administrador',
+        role: 'ADMIN',
+      },
+    });
+    console.log('Admin creado:', admin.email);
+  } else {
+    console.log('ADMIN_PASSWORD no seteada — omitiendo creación de admin');
+  }
 
   // Ponente de ejemplo
   const ponentePassword = await bcrypt.hash(process.env.PONENTE_PASSWORD ?? 'Ponente1234!', SALT_ROUNDS);
