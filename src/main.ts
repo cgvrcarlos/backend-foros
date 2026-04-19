@@ -15,7 +15,8 @@ async function bootstrap() {
   const allowedOrigins = configService
     .get<string>('ALLOWED_ORIGINS', 'http://localhost:3000')
     .split(',')
-    .map((o) => o.trim());
+    .map((o) => o.trim())
+    .map((o) => (o.startsWith('http') ? o : `https://${o}`));
 
   // Security headers
   app.use(helmet());
