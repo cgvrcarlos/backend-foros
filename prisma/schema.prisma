@@ -55,88 +55,121 @@ enum Seccion {
   PROPUESTAS
 }
 
-enum AdminRole {
+enum Role {
   ADMIN
   PONENTE
+  ASISTENTE
+}
+
+enum AdminLevel {
+  STANDARD
+  SUPER
 }
 
 // =============================================================================
-// MODELS
+// IDENTITY
 // =============================================================================
 
-// Usuario/Asistente del evento
-model User {
-  id               String           @id @default(cuid())
+model Account {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String?
+  nombre    String
+  apaterno  String?
+  amaterno  String?
+  telefono  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // role assignments
+  roles AccountRole[]
+
+  // 0..1 profile per role (present iff role is assigned)
+  userProfile    UserProfile?
+  ponenteProfile PonenteProfile?
+  adminProfile   AdminProfile?
+
+  // domain relations
+  attendances Attendance[]
+  responses   Response[]
+  ponencias   Ponencia[]
+
+  @@index([email])
+}
+
+model AccountRole {
+  accountId String
+  role      Role
+  createdAt DateTime @default(now())
+
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@id([accountId, role])
+  @@index([role])
+  @@index([accountId])
+}
+
+// =============================================================================
+// PROFILES (one row per role-when-present)
+// =============================================================================
+
+model UserProfile {
+  accountId        String           @id
   apaterno         String
   amaterno         String
   nombres          String
-  email            String           @unique
-  password         String?
-  telefono         String
-  redesSociales    String?
-  calle            String
-  colonia          String
-  cp               String
-  municipio        String
   genero           Genero
   ocupacion        String
   gradoEstudios    GradoEstudios
   escuela          String?
   situacionLaboral SituacionLaboral
-  createdAt        DateTime         @default(now())
-  updatedAt        DateTime         @updatedAt
+  direccion        Json?
+  redesSociales    Json?
 
-  // Relations
-  attendances Attendance[]
-  responses   Response[]
-
-  @@index([email])
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 }
 
-// Administrador del sistema
-model Admin {
-  id        String    @id @default(cuid())
-  email     String    @unique
-  password  String
-  nombre    String
-  role      AdminRole @default(ADMIN)
-  createdAt DateTime  @default(now())
+model PonenteProfile {
+  accountId     String  @id
+  bio           String?
+  especialidad  String?
+  fotoUrl       String?
+  redesSociales Json?
 
-  @@index([email])
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 }
 
-// Ponente (speaker del evento)
-model Ponente {
-  id        String     @id @default(cuid())
-  email     String     @unique
-  password  String
-  nombre    String
-  bio       String?
-  createdAt DateTime   @default(now())
+model AdminProfile {
+  accountId String     @id
+  nivel     AdminLevel @default(STANDARD)
 
-  // Relations
-  ponencias Ponencia[]
-
-  @@index([email])
+  account Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
 }
 
-// Itinerario: relación entre ponente y evento
+// =============================================================================
+// DOMAIN (re-wired to Account)
+// =============================================================================
+
+// Itinerario: relación entre ponente (Account) y evento
 model Ponencia {
-  id         String   @id @default(cuid())
-  ponenteId  String
-  eventoId   String
-  lugar      String
-  horaInicio String
-  horaFin    String
-  orden      Int      @default(0)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  id          String   @id @default(cuid())
+  ponenteId   String
+  eventoId    String
+  titulo      String
+  descripcion String?
+  lugar       String
+  horaInicio  DateTime @db.Time(0)
+  horaFin     DateTime @db.Time(0)
+  orden       Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
   // Relations
-  ponente Ponente @relation(fields: [ponenteId], references: [id], onDelete: Cascade)
+  ponente Account @relation(fields: [ponenteId], references: [id], onDelete: Cascade)
   evento  Event   @relation(fields: [eventoId], references: [id], onDelete: Cascade)
 
   @@index([eventoId])
+  @@index([ponenteId])
 }
 
 // Evento del calendario
@@ -206,12 +239,13 @@ model Attendance {
   confirmedAt    DateTime       @default(now())
 
   // Relations
-  user     User      @relation(fields: [userId], references: [id])
+  account  Account   @relation(fields: [userId], references: [id], onDelete: Cascade)
   event    Event     @relation(fields: [eventId], references: [id])
   response Response?
 
   @@unique([userId, eventId])
   @@index([eventId, confirmedAt])
+  @@index([userId])
 }
 
 // Respuesta completa de encuesta
@@ -225,10 +259,11 @@ model Response {
   // Relations
   attendance Attendance @relation(fields: [attendanceId], references: [id], onDelete: Cascade)
   survey     Survey     @relation(fields: [surveyId], references: [id])
-  user       User       @relation(fields: [userId], references: [id])
+  account    Account    @relation(fields: [userId], references: [id])
   answers    Answer[]
 
   @@index([surveyId, submittedAt])
+  @@index([userId])
 }
 
 // Respuesta individual a una pregunta

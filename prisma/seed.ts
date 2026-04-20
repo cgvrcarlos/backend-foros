@@ -1,90 +1,138 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Role, AdminLevel } from '@prisma/client';
 import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcryptjs';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
 const prisma = new PrismaClient({ adapter });
 
-async function main() {
-  const SALT_ROUNDS = 12;
+const SALT_ROUNDS = 10;
 
-  // Admin — solo si ADMIN_PASSWORD está seteada
-  const adminEmail = process.env.ADMIN_EMAIL ?? 'admin@eventpass.com';
-  const adminRawPassword = process.env.ADMIN_PASSWORD;
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-  if (adminRawPassword) {
-    const adminPassword = await bcrypt.hash(adminRawPassword, SALT_ROUNDS);
-    const admin = await prisma.admin.upsert({
-      where: { email: adminEmail },
-      update: {},
-      create: {
-        email: adminEmail,
-        password: adminPassword,
-        nombre: 'Administrador',
-        role: 'ADMIN',
-      },
-    });
-    console.log('Admin creado:', admin.email);
-  } else {
-    console.log('ADMIN_PASSWORD no seteada — omitiendo creación de admin');
+async function seedAdmin() {
+  const email = 'admin@eventpass.com';
+
+  const existing = await prisma.account.findUnique({ where: { email } });
+  if (existing) {
+    console.log(`Admin already exists: ${email} — skipping`);
+    return;
   }
 
-  // Ponente de ejemplo
-  const ponentePassword = await bcrypt.hash(process.env.PONENTE_PASSWORD ?? 'Ponente1234!', SALT_ROUNDS);
-  const ponente = await prisma.ponente.upsert({
-    where: { email: 'ponente@eventpass.com' },
-    update: {},
-    create: {
-      email: 'ponente@eventpass.com',
-      password: ponentePassword,
-      nombre: 'María González',
-      bio: 'Experta en tecnología cívica y participación ciudadana.',
-    },
-  });
-  console.log('Ponente creado:', ponente.email);
+  const password = await bcrypt.hash('Admin1234!', SALT_ROUNDS);
 
-  // Evento de ejemplo
+  await prisma.$transaction(async (tx) => {
+    const account = await tx.account.create({
+      data: {
+        email,
+        password,
+        nombre: 'Administrador',
+      },
+    });
+
+    await tx.accountRole.create({
+      data: { accountId: account.id, role: Role.ADMIN },
+    });
+
+    await tx.adminProfile.create({
+      data: { accountId: account.id, nivel: AdminLevel.STANDARD },
+    });
+  });
+
+  console.log(`Admin creado: ${email}`);
+}
+
+async function seedPonente() {
+  const email = 'ponente@eventpass.com';
+
+  const existing = await prisma.account.findUnique({ where: { email } });
+  if (existing) {
+    console.log(`Ponente already exists: ${email} — skipping`);
+    return;
+  }
+
+  const password = await bcrypt.hash('Ponente1234!', SALT_ROUNDS);
+
+  await prisma.$transaction(async (tx) => {
+    const account = await tx.account.create({
+      data: {
+        email,
+        password,
+        nombre: 'Ponente Demo',
+      },
+    });
+
+    await tx.accountRole.create({
+      data: { accountId: account.id, role: Role.PONENTE },
+    });
+
+    await tx.ponenteProfile.create({
+      data: {
+        accountId: account.id,
+        bio: 'Ponente de demostración',
+        especialidad: 'Tecnología',
+      },
+    });
+  });
+
+  console.log(`Ponente creado: ${email}`);
+}
+
+async function seedEvento() {
   const evento = await prisma.event.upsert({
     where: { id: 'evento-demo-01' },
     update: {},
     create: {
       id: 'evento-demo-01',
       titulo: 'Foro de Innovación Ciudadana 2026',
-      descripcion: 'Un espacio para discutir el futuro de la participación ciudadana en la era digital.',
+      descripcion:
+        'Un espacio para discutir el futuro de la participación ciudadana en la era digital.',
       fechaHora: new Date('2026-05-15T10:00:00-06:00'),
       ubicacionPresencial: 'Auditorio Municipal, Planta Baja, Sala A',
       publicado: true,
     },
   });
   console.log('Evento creado:', evento.titulo);
+  return evento;
+}
 
-  // Ponencia
+async function seedPonencia(eventoId: string) {
+  // The ponencia references the ponente Account — look it up first
+  const ponenteAccount = await prisma.account.findUnique({
+    where: { email: 'ponente@eventpass.com' },
+  });
+
+  if (!ponenteAccount) {
+    console.log('Ponente account not found — skipping ponencia');
+    return;
+  }
+
   await prisma.ponencia.upsert({
     where: { id: 'ponencia-demo-01' },
     update: {},
     create: {
       id: 'ponencia-demo-01',
-      ponenteId: ponente.id,
-      eventoId: evento.id,
+      ponenteId: ponenteAccount.id,
+      eventoId,
+      titulo: 'Participación Ciudadana en la Era Digital',
       lugar: 'Sala A - Auditorio Principal',
-      horaInicio: '10:00',
-      horaFin: '11:30',
+      horaInicio: new Date('1970-01-01T10:00:00Z'),
+      horaFin: new Date('1970-01-01T11:30:00Z'),
       orden: 1,
     },
   });
   console.log('Ponencia creada');
+}
 
-  // Encuesta del evento
+async function seedEncuesta(eventId: string) {
   const survey = await prisma.survey.upsert({
-    where: { eventId: evento.id },
+    where: { eventId },
     update: {},
     create: {
-      eventId: evento.id,
+      eventId,
       titulo: 'Encuesta del Foro de Innovación',
     },
   });
 
-  // Preguntas
   await prisma.question.createMany({
     skipDuplicates: true,
     data: [
@@ -111,7 +159,8 @@ async function main() {
       {
         surveyId: survey.id,
         tipo: 'ABIERTA_LARGO',
-        texto: '¿Qué propuesta le harías a la ponente sobre participación ciudadana digital?',
+        texto:
+          '¿Qué propuesta le harías a la ponente sobre participación ciudadana digital?',
         opciones: [],
         esRequerida: false,
         seccion: 'PROPUESTAS',
@@ -120,10 +169,21 @@ async function main() {
     ],
   });
   console.log('Encuesta y preguntas creadas');
+}
 
-  console.log('\n✅ Seed completado exitosamente');
-  console.log(`Admin:   ${adminEmail}`);
-  console.log(`Ponente: ponente@eventpass.com`);
+// ─── Main ─────────────────────────────────────────────────────────────────────
+
+async function main() {
+  await seedAdmin();
+  await seedPonente();
+
+  const evento = await seedEvento();
+  await seedPonencia(evento.id);
+  await seedEncuesta(evento.id);
+
+  console.log('\nSeed completado exitosamente');
+  console.log('Admin:   admin@eventpass.com');
+  console.log('Ponente: ponente@eventpass.com');
 }
 
 main()
