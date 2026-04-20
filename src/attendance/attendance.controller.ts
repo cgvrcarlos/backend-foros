@@ -16,7 +16,7 @@ import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 interface JwtUser {
   sub: string;
   email: string;
-  role: 'USER' | 'ADMIN' | 'PONENTE';
+  roles: string[];
 }
 
 interface AuthenticatedRequest extends Request {
@@ -29,7 +29,7 @@ export class AttendanceController {
   constructor(private readonly attendanceService: AttendanceService) {}
 
   @Post()
-  @Roles('USER', 'ADMIN')
+  @Roles('ASISTENTE', 'ADMIN')
   confirm(@Req() req: AuthenticatedRequest, @Body() dto: ConfirmAttendanceDto) {
     return this.attendanceService.confirm(req.user.sub, dto);
   }
@@ -40,16 +40,16 @@ export class AttendanceController {
     @Req() req: AuthenticatedRequest,
     @Param('eventId') eventId: string,
   ) {
-    return this.attendanceService.getByEvent(
-      eventId,
-      req.user.role,
-      req.user.sub,
-    );
+    // Pass all roles for proper multi-role support
+    const roles = req.user.roles ?? [];
+    return this.attendanceService.getByEvent(eventId, roles, req.user.sub);
   }
 
   @Get(':id/qr')
-  @Roles('USER', 'ADMIN')
+  @Roles('ASISTENTE', 'ADMIN')
   getQr(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
-    return this.attendanceService.getQr(id, req.user.sub, req.user.role);
+    // Pass all roles for proper multi-role support
+    const roles = req.user.roles ?? [];
+    return this.attendanceService.getQr(id, req.user.sub, roles);
   }
 }

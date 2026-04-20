@@ -11,6 +11,8 @@ const PONENCIAS_INCLUDE = {
   ponencias: {
     select: {
       id: true,
+      titulo: true,
+      descripcion: true,
       lugar: true,
       horaInicio: true,
       horaFin: true,

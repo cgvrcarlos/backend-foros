@@ -3,6 +3,14 @@ import { IsString, IsOptional, IsNumber, Matches } from 'class-validator';
 export class UpdatePonenciaDto {
   @IsString()
   @IsOptional()
+  titulo?: string;
+
+  @IsString()
+  @IsOptional()
+  descripcion?: string;
+
+  @IsString()
+  @IsOptional()
   lugar?: string;
 
   @IsString()

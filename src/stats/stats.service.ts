@@ -1,6 +1,6 @@
 import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { TipoAsistencia } from '@prisma/client';
+import { TipoAsistencia, Role } from '@prisma/client';
 
 @Injectable()
 export class StatsService {
@@ -13,10 +13,10 @@ export class StatsService {
       totalAsistencias,
       totalPonentes,
     ] = await Promise.all([
-      this.prisma.user.count(),
+      this.prisma.accountRole.count({ where: { role: Role.ASISTENTE } }),
       this.prisma.event.count({ where: { eliminado: false } }),
       this.prisma.attendance.count(),
-      this.prisma.ponente.count(),
+      this.prisma.accountRole.count({ where: { role: Role.PONENTE } }),
     ]);
 
     return {
@@ -27,17 +27,17 @@ export class StatsService {
     };
   }
 
-  async getByEvent(eventId: string, role: string, userId: string) {
-    // Si PONENTE: verificar que tiene ponencia en ese evento
-    if (role === 'PONENTE') {
-      const ponencia = await this.prisma.ponencia.findFirst({
+async getByEvent(eventId: string, roles: string[], userId: string) {
+    // Si PONENTE: verificar que tiene poesia en ese evento
+    if (roles.includes('PONENTE')) {
+      const pon = await this.prisma.ponencia.findFirst({
         where: {
           eventoId: eventId,
           ponenteId: userId,
         },
       });
 
-      if (!ponencia) {
+      if (!pon) {
         throw new ForbiddenException(
           'No tenés una ponencia asignada en este evento',
         );

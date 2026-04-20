@@ -13,6 +13,14 @@ export class CreatePonenciaDto {
 
   @IsString()
   @IsNotEmpty()
+  titulo: string;
+
+  @IsString()
+  @IsOptional()
+  descripcion?: string;
+
+  @IsString()
+  @IsNotEmpty()
   lugar: string;
 
   @IsString()

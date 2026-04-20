@@ -7,7 +7,7 @@ import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 interface JwtUser {
   sub: string;
   email: string;
-  role: 'USER' | 'ADMIN' | 'PONENTE';
+  roles: string[];
 }
 
 interface AuthenticatedRequest extends Request {
@@ -28,6 +28,8 @@ export class StatsController {
   @Get('event/:id')
   @Roles('ADMIN', 'PONENTE')
   getByEvent(@Req() req: AuthenticatedRequest, @Param('id') id: string) {
-    return this.statsService.getByEvent(id, req.user.role, req.user.sub);
+    // Pass all roles for proper multi-role support
+    const roles = req.user.roles ?? [];
+    return this.statsService.getByEvent(id, roles, req.user.sub);
   }
 }

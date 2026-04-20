@@ -7,7 +7,7 @@ describe('UsersService', () => {
   let service: UsersService;
 
   const mockPrisma = {
-    user: { findUnique: jest.fn() },
+    account: { findUnique: jest.fn() },
   };
 
   beforeEach(async () => {
@@ -24,17 +24,34 @@ describe('UsersService', () => {
 
   describe('getProfile', () => {
     it('should return user profile', async () => {
-      const mockUser = {
-        id: 'uid', email: 'test@test.com', apaterno: 'García', amaterno: 'López',
-        nombres: 'Juan', telefono: '5551234567',
+      const mockAccount = {
+        id: 'uid',
+        email: 'test@test.com',
+        nombre: 'Juan García',
+        telefono: '5551234567',
+        createdAt: new Date(),
+        roles: [{ role: 'ASISTENTE' }],
+        userProfile: {
+          apaterno: 'García',
+          amaterno: 'López',
+          nombres: 'Juan Carlos',
+          genero: 'MASCULINO',
+          ocupacion: 'EMPLEADO',
+          gradoEstudios: 'LICENCIATURA',
+          escuela: null,
+          situacionLaboral: 'EMPLEADO',
+          direccion: null,
+          redesSociales: null,
+        },
       };
-      mockPrisma.user.findUnique.mockResolvedValue(mockUser);
+      mockPrisma.account.findUnique.mockResolvedValue(mockAccount);
       const result = await service.getProfile('uid');
       expect(result.id).toBe('uid');
+      expect(result.email).toBe('test@test.com');
     });
 
-    it('should throw NotFoundException if user not found', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue(null);
+    it('should throw NotFoundException if account not found', async () => {
+      mockPrisma.account.findUnique.mockResolvedValue(null);
       await expect(service.getProfile('invalid-id')).rejects.toThrow(NotFoundException);
     });
   });

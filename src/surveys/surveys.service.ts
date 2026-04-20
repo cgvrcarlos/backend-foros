@@ -179,7 +179,7 @@ export class SurveysService {
     await this.prisma.question.delete({ where: { id: questionId } });
   }
 
-  async getResponses(surveyId: string, role: string, userId: string) {
+async getResponses(surveyId: string, roles: string[], userId: string) {
     const survey = await this.prisma.survey.findUnique({
       where: { id: surveyId },
       include: { event: true },
@@ -189,15 +189,15 @@ export class SurveysService {
       throw new NotFoundException(`Encuesta ${surveyId} no encontrada`);
     }
 
-    if (role === 'PONENTE') {
-      const ponencia = await this.prisma.ponencia.findFirst({
+    if (roles.includes('PONENTE')) {
+      const pon = await this.prisma.ponencia.findFirst({
         where: {
           eventoId: survey.eventId,
-          ponente: { id: userId },
+          ponenteId: userId,
         },
       });
 
-      if (!ponencia) {
+      if (!pon) {
         throw new ForbiddenException(
           'No tenés ponencia en el evento de esta encuesta',
         );
@@ -207,12 +207,17 @@ export class SurveysService {
     return this.prisma.response.findMany({
       where: { surveyId },
       include: {
-        user: {
+        account: {
           select: {
-            apaterno: true,
-            amaterno: true,
-            nombres: true,
             email: true,
+            nombre: true,
+            userProfile: {
+              select: {
+                apaterno: true,
+                amaterno: true,
+                nombres: true,
+              },
+            },
           },
         },
         answers: {

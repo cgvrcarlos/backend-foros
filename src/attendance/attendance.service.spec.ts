@@ -86,7 +86,7 @@ describe('AttendanceService', () => {
       // Aquí enviamos 1 answer vacía para disparar la validación
       const dtoConAnswerVacia = {
         ...dto,
-        answers: [{ questionId: 'q-otra', respuesta: 'algo' }],
+        answers: [{ questionId: 'q-otra', answer: 'algo' }],
       };
 
       await expect(service.confirm('user-1', dtoConAnswerVacia)).rejects.toThrow(BadRequestException);

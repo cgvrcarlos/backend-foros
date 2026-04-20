@@ -5,6 +5,7 @@ import {
   IsArray,
   IsOptional,
   ValidateNested,
+  Allow,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { TipoAsistencia } from '@prisma/client';
@@ -14,8 +15,8 @@ export class AnswerItemDto {
   @IsNotEmpty()
   questionId: string;
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  answer: any;
+  @Allow()
+  answer: string | string[] | number;
 }
 
 export class ConfirmAttendanceDto {

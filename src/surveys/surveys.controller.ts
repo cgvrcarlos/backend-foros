@@ -77,12 +77,10 @@ export class SurveysController {
   @Get('surveys/:surveyId/responses')
   getResponses(
     @Param('surveyId') surveyId: string,
-    @Request() req: { user: { sub: string; role: string } },
+    @Request() req: { user: { sub: string; roles: string[] } },
   ) {
-    return this.surveysService.getResponses(
-      surveyId,
-      req.user.role,
-      req.user.sub,
-    );
+    // Pass all roles for proper multi-role support
+    const roles = req.user.roles ?? [];
+    return this.surveysService.getResponses(surveyId, roles, req.user.sub);
   }
 }

@@ -4,47 +4,57 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import * as bcrypt from 'bcryptjs';
+import { AccountsService } from '../accounts/accounts.service';
+import { Role } from '@prisma/client';
 import { CreatePonenteDto } from './dto/create-ponente.dto';
 import { UpdatePonenteDto } from './dto/update-ponente.dto';
 import { CreatePonenciaDto } from './dto/create-ponencia.dto';
 import { UpdatePonenciaDto } from './dto/update-ponencia.dto';
 
-const SALT_ROUNDS = 12;
-
 @Injectable()
 export class PonentesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly accountsService: AccountsService,
+  ) {}
 
   async findAll() {
-    const ponentes = await this.prisma.ponente.findMany({
-      select: {
-        id: true,
-        email: true,
-        nombre: true,
-        bio: true,
-        createdAt: true,
+    const accounts = await this.prisma.account.findMany({
+      where: {
+        roles: { some: { role: Role.PONENTE } },
+      },
+      include: {
+        ponenteProfile: true,
         _count: {
           select: { ponencias: true },
         },
       },
       orderBy: { nombre: 'asc' },
     });
-    return ponentes;
+
+    return accounts.map((a) => ({
+      id: a.id,
+      email: a.email,
+      nombre: a.nombre,
+      bio: a.ponenteProfile?.bio ?? null,
+      especialidad: a.ponenteProfile?.especialidad ?? null,
+      fotoUrl: a.ponenteProfile?.fotoUrl ?? null,
+      createdAt: a.createdAt,
+      _count: a._count,
+    }));
   }
 
   async findOne(id: string) {
-    const ponente = await this.prisma.ponente.findUnique({
+    const account = await this.prisma.account.findUnique({
       where: { id },
-      select: {
-        id: true,
-        email: true,
-        nombre: true,
-        bio: true,
-        createdAt: true,
+      include: {
+        ponenteProfile: true,
+        roles: true,
         ponencias: {
           select: {
             id: true,
+            titulo: true,
+            descripcion: true,
             lugar: true,
             horaInicio: true,
             horaFin: true,
@@ -64,75 +74,93 @@ export class PonentesService {
       },
     });
 
-    if (!ponente) {
+    if (!account || !account.roles.some((r) => r.role === Role.PONENTE)) {
       throw new NotFoundException(`Ponente con id "${id}" no encontrado`);
     }
 
-    return ponente;
+    return {
+      id: account.id,
+      email: account.email,
+      nombre: account.nombre,
+      bio: account.ponenteProfile?.bio ?? null,
+      especialidad: account.ponenteProfile?.especialidad ?? null,
+      fotoUrl: account.ponenteProfile?.fotoUrl ?? null,
+      createdAt: account.createdAt,
+      ponencias: account.ponencias,
+    };
   }
 
   async create(dto: CreatePonenteDto) {
-    const existing = await this.prisma.ponente.findUnique({
+    const existing = await this.prisma.account.findUnique({
       where: { email: dto.email },
     });
 
     if (existing) {
       throw new ConflictException(
-        `Ya existe un ponente con el email "${dto.email}"`,
+        `Ya existe una cuenta con el email "${dto.email}"`,
       );
     }
 
-    const hashedPassword = await bcrypt.hash(dto.password, SALT_ROUNDS);
-
-    const ponente = await this.prisma.ponente.create({
-      data: {
-        email: dto.email,
-        password: hashedPassword,
-        nombre: dto.nombre,
+    const account = await this.accountsService.createWithProfile({
+      email: dto.email,
+      password: dto.password,
+      nombre: dto.nombre,
+      role: Role.PONENTE,
+      profile: {
         bio: dto.bio,
-      },
-      select: {
-        id: true,
-        email: true,
-        nombre: true,
-        bio: true,
-        createdAt: true,
       },
     });
 
-    return ponente;
+    return {
+      id: account.id,
+      email: account.email,
+      nombre: account.nombre,
+      bio: dto.bio ?? null,
+      createdAt: account.createdAt,
+    };
   }
 
   async update(id: string, dto: UpdatePonenteDto) {
+    // Verify exists as ponente
     await this.findOne(id);
 
-    const ponente = await this.prisma.ponente.update({
-      where: { id },
-      data: dto,
-      select: {
-        id: true,
-        email: true,
-        nombre: true,
-        bio: true,
-        createdAt: true,
-      },
+    // Update Account fields (email, nombre) and PonenteProfile fields (bio) separately
+    const accountData: { email?: string; nombre?: string } = {};
+    if (dto.email !== undefined) accountData.email = dto.email;
+    if (dto.nombre !== undefined) accountData.nombre = dto.nombre;
+
+    await this.prisma.$transaction(async (tx) => {
+      if (Object.keys(accountData).length > 0) {
+        await tx.account.update({ where: { id }, data: accountData });
+      }
+
+      if (dto.bio !== undefined) {
+        await tx.ponenteProfile.update({
+          where: { accountId: id },
+          data: { bio: dto.bio },
+        });
+      }
     });
 
-    return ponente;
+    return this.findOne(id);
   }
 
   async remove(id: string) {
     await this.findOne(id);
-    await this.prisma.ponente.delete({ where: { id } });
+    // Cascade deletes profile, roles, ponencias via schema onDelete: Cascade
+    await this.prisma.account.delete({ where: { id } });
   }
 
   async createPonencia(eventoId: string, dto: CreatePonenciaDto) {
     const [ponente, evento] = await Promise.all([
-      this.prisma.ponente.findUnique({ where: { id: dto.ponenteId } }),
+      this.prisma.account.findUnique({
+        where: { id: dto.ponenteId },
+        include: { roles: true },
+      }),
       this.prisma.event.findUnique({ where: { id: eventoId } }),
     ]);
 
-    if (!ponente) {
+    if (!ponente || !ponente.roles.some((r) => r.role === Role.PONENTE)) {
       throw new NotFoundException(
         `Ponente con id "${dto.ponenteId}" no encontrado`,
       );
@@ -142,17 +170,24 @@ export class PonentesService {
       throw new NotFoundException(`Evento con id "${eventoId}" no encontrado`);
     }
 
+    const horaInicio = parseTime(dto.horaInicio);
+    const horaFin = parseTime(dto.horaFin);
+
     const ponencia = await this.prisma.ponencia.create({
       data: {
         ponenteId: dto.ponenteId,
         eventoId,
+        titulo: dto.titulo,
+        descripcion: dto.descripcion,
         lugar: dto.lugar,
-        horaInicio: dto.horaInicio,
-        horaFin: dto.horaFin,
+        horaInicio,
+        horaFin,
         orden: dto.orden ?? 0,
       },
       select: {
         id: true,
+        titulo: true,
+        descripcion: true,
         lugar: true,
         horaInicio: true,
         horaFin: true,
@@ -182,11 +217,21 @@ export class PonentesService {
       );
     }
 
+    const data: Record<string, unknown> = {};
+    if (dto.titulo !== undefined) data.titulo = dto.titulo;
+    if (dto.descripcion !== undefined) data.descripcion = dto.descripcion;
+    if (dto.lugar !== undefined) data.lugar = dto.lugar;
+    if (dto.horaInicio !== undefined) data.horaInicio = parseTime(dto.horaInicio);
+    if (dto.horaFin !== undefined) data.horaFin = parseTime(dto.horaFin);
+    if (dto.orden !== undefined) data.orden = dto.orden;
+
     return this.prisma.ponencia.update({
       where: { id: ponenciaId },
-      data: dto,
+      data,
       select: {
         id: true,
+        titulo: true,
+        descripcion: true,
         lugar: true,
         horaInicio: true,
         horaFin: true,
@@ -217,17 +262,17 @@ export class PonentesService {
     await this.prisma.ponencia.delete({ where: { id: ponenciaId } });
   }
 
-  async getMisPonencias(ponenteId: string) {
-    const ponente = await this.prisma.ponente.findUnique({
-      where: { id: ponenteId },
-      select: {
-        id: true,
-        nombre: true,
-        email: true,
-        bio: true,
+  async getMisPonencias(accountId: string) {
+    const account = await this.prisma.account.findUnique({
+      where: { id: accountId },
+      include: {
+        ponenteProfile: true,
+        roles: true,
         ponencias: {
           select: {
             id: true,
+            titulo: true,
+            descripcion: true,
             lugar: true,
             horaInicio: true,
             horaFin: true,
@@ -253,11 +298,17 @@ export class PonentesService {
       },
     });
 
-    if (!ponente) {
-      throw new NotFoundException(`Ponente con id "${ponenteId}" no encontrado`);
+    if (!account || !account.roles.some((r) => r.role === Role.PONENTE)) {
+      throw new NotFoundException(`Ponente con id "${accountId}" no encontrado`);
     }
 
-    return ponente;
+    return {
+      id: account.id,
+      nombre: account.nombre,
+      email: account.email,
+      bio: account.ponenteProfile?.bio ?? null,
+      ponencias: account.ponencias,
+    };
   }
 
   async getPonenciasByEvent(eventoId: string) {
@@ -265,6 +316,8 @@ export class PonentesService {
       where: { eventoId },
       select: {
         id: true,
+        titulo: true,
+        descripcion: true,
         lugar: true,
         horaInicio: true,
         horaFin: true,
@@ -276,7 +329,9 @@ export class PonentesService {
             id: true,
             nombre: true,
             email: true,
-            bio: true,
+            ponenteProfile: {
+              select: { bio: true },
+            },
           },
         },
         evento: {
@@ -292,4 +347,17 @@ export class PonentesService {
 
     return ponencias;
   }
+}
+
+// ─── Helper ───────────────────────────────────────────────────────────────────
+
+/**
+ * Convert "HH:MM" string to a Date object that Prisma stores as TIME(0).
+ * Prisma uses a full Date for @db.Time(0) — only the time portion is stored.
+ */
+function parseTime(timeStr: string): Date {
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  const d = new Date('1970-01-01T00:00:00Z');
+  d.setUTCHours(hours, minutes, 0, 0);
+  return d;
 }

@@ -98,17 +98,17 @@ export class AttendanceService {
     return { attendance, qrCode };
   }
 
-  async getByEvent(eventId: string, role: string, userId: string) {
-    // Si PONENTE: verificar que tiene ponencia en ese evento
-    if (role === 'PONENTE') {
-      const ponencia = await this.prisma.ponencia.findFirst({
+  async getByEvent(eventId: string, roles: string[], userId: string) {
+    // Si PONENTE: verificar que tiene poesia en ese evento
+    if (roles.includes('PONENTE')) {
+      const pon = await this.prisma.ponencia.findFirst({
         where: {
           eventoId: eventId,
           ponenteId: userId,
         },
       });
 
-      if (!ponencia) {
+      if (!pon) {
         throw new ForbiddenException(
           'No tenés una ponencia asignada en este evento',
         );
@@ -122,23 +122,41 @@ export class AttendanceService {
         tipoAsistencia: true,
         confirmedAt: true,
         qrCode: true,
-        user: {
+        account: {
           select: {
-            nombres: true,
-            apaterno: true,
-            amaterno: true,
+            nombre: true,
             email: true,
             telefono: true,
+            userProfile: {
+              select: {
+                nombres: true,
+                apaterno: true,
+                amaterno: true,
+              },
+            },
           },
         },
       },
       orderBy: { confirmedAt: 'asc' },
     });
 
-    return attendances;
+    // Flatten for backward compatibility: controllers expect { nombres, apaterno, amaterno, email, telefono }
+    return attendances.map((att) => ({
+      id: att.id,
+      tipoAsistencia: att.tipoAsistencia,
+      confirmedAt: att.confirmedAt,
+      qrCode: att.qrCode,
+      user: {
+        nombres: att.account?.userProfile?.nombres ?? att.account?.nombre ?? null,
+        apaterno: att.account?.userProfile?.apaterno ?? null,
+        amaterno: att.account?.userProfile?.amaterno ?? null,
+        email: att.account?.email ?? null,
+        telefono: att.account?.telefono ?? null,
+      },
+    }));
   }
 
-  async getQr(attendanceId: string, userId: string, role: string) {
+  async getQr(attendanceId: string, userId: string, roles: string[]) {
     const attendance = await this.prisma.attendance.findUnique({
       where: { id: attendanceId },
       select: {
@@ -153,8 +171,8 @@ export class AttendanceService {
       throw new NotFoundException(`Attendance con id "${attendanceId}" no encontrado`);
     }
 
-    // El USER solo puede ver su propio QR
-    if (role === 'USER' && attendance.userId !== userId) {
+    // El ASISTENTE solo puede ver su propio QR
+    if (roles.includes('ASISTENTE') && attendance.userId !== userId) {
       throw new ForbiddenException('No tenés permiso para ver este QR');
     }
 

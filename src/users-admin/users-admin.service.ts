@@ -1,21 +1,11 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { AccountsService } from '../accounts/accounts.service';
+import { Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 import { CreateAdminDto } from './dto/create-admin.dto';
 
-const USER_LIST_SELECT = {
-  id: true,
-  apaterno: true,
-  amaterno: true,
-  nombres: true,
-  email: true,
-  telefono: true,
-  genero: true,
-  ocupacion: true,
-  gradoEstudios: true,
-  situacionLaboral: true,
-  createdAt: true,
-} as const;
+const SALT_ROUNDS = 12;
 
 function escapeCsvValue(value: string | null | undefined): string {
   if (value === null || value === undefined) return '';
@@ -27,62 +17,110 @@ function escapeCsvValue(value: string | null | undefined): string {
   return str;
 }
 
-const SALT_ROUNDS = 12;
-
 @Injectable()
 export class UsersAdminService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly accountsService: AccountsService,
+  ) {}
 
   async createAdmin(dto: CreateAdminDto) {
-    const existing = await this.prisma.admin.findUnique({ where: { email: dto.email } });
+    const existing = await this.prisma.account.findUnique({
+      where: { email: dto.email },
+    });
     if (existing) throw new ConflictException('El email ya está registrado');
 
-    const hashedPassword = await bcrypt.hash(dto.password, SALT_ROUNDS);
-    const admin = await this.prisma.admin.create({
-      data: {
-        email: dto.email,
-        password: hashedPassword,
-        nombre: dto.nombre,
-        role: dto.role ?? 'ADMIN',
-      },
-      select: { id: true, email: true, nombre: true, role: true, createdAt: true },
+    const role: Role = (dto.role as Role) ?? Role.ADMIN;
+
+    const account = await this.accountsService.createWithProfile({
+      email: dto.email,
+      password: dto.password,
+      nombre: dto.nombre,
+      role,
+      profile: role === Role.ADMIN ? { nivel: 'STANDARD' } : {},
     });
-    return admin;
+
+    return {
+      id: account.id,
+      email: account.email,
+      nombre: account.nombre,
+      role,
+      createdAt: account.createdAt,
+    };
   }
 
   async changeAdminPassword(id: string, newPassword: string) {
-    const admin = await this.prisma.admin.findUnique({ where: { id } });
-    if (!admin) throw new NotFoundException(`Admin con id "${id}" no encontrado`);
+    const account = await this.prisma.account.findUnique({ where: { id } });
+    if (!account) throw new NotFoundException(`Admin con id "${id}" no encontrado`);
 
     const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
-    await this.prisma.admin.update({
+    await this.prisma.account.update({
       where: { id },
       data: { password: hashedPassword },
     });
   }
 
   async listAdmins() {
-    return this.prisma.admin.findMany({
-      select: { id: true, email: true, nombre: true, role: true, createdAt: true },
+    const accounts = await this.prisma.account.findMany({
+      where: {
+        roles: { some: { role: Role.ADMIN } },
+      },
+      include: {
+        roles: true,
+        adminProfile: true,
+      },
       orderBy: { createdAt: 'asc' },
     });
+
+    return accounts.map((a) => ({
+      id: a.id,
+      email: a.email,
+      nombre: a.nombre,
+      role: Role.ADMIN,
+      nivel: a.adminProfile?.nivel ?? 'STANDARD',
+      createdAt: a.createdAt,
+    }));
   }
 
   async findAll(page = 1, limit = 50) {
     const skip = (page - 1) * limit;
 
-    const [users, total] = await Promise.all([
-      this.prisma.user.findMany({
-        select: USER_LIST_SELECT,
+    const [accounts, total] = await Promise.all([
+      this.prisma.account.findMany({
+        where: {
+          roles: { some: { role: Role.ASISTENTE } },
+        },
+        include: {
+          userProfile: true,
+          roles: true,
+        },
         orderBy: { createdAt: 'desc' },
         skip,
         take: limit,
       }),
-      this.prisma.user.count(),
+      this.prisma.accountRole.count({ where: { role: Role.ASISTENTE } }),
     ]);
 
+    const data = accounts.map((a) => {
+      const p = a.userProfile;
+      return {
+        id: a.id,
+        email: a.email,
+        nombre: a.nombre,
+        telefono: a.telefono,
+        apaterno: p?.apaterno ?? null,
+        amaterno: p?.amaterno ?? null,
+        nombres: p?.nombres ?? null,
+        genero: p?.genero ?? null,
+        ocupacion: p?.ocupacion ?? null,
+        gradoEstudios: p?.gradoEstudios ?? null,
+        situacionLaboral: p?.situacionLaboral ?? null,
+        createdAt: a.createdAt,
+      };
+    });
+
     return {
-      data: users,
+      data,
       total,
       page,
       limit,
@@ -91,9 +129,11 @@ export class UsersAdminService {
   }
 
   async findOne(id: string) {
-    const user = await this.prisma.user.findUnique({
+    const account = await this.prisma.account.findUnique({
       where: { id },
       include: {
+        userProfile: true,
+        roles: true,
         attendances: {
           select: {
             id: true,
@@ -112,15 +152,38 @@ export class UsersAdminService {
       },
     });
 
-    if (!user) {
+    if (!account) {
       throw new NotFoundException(`Usuario con id "${id}" no encontrado`);
     }
 
-    return user;
+    const p = account.userProfile;
+    return {
+      id: account.id,
+      email: account.email,
+      nombre: account.nombre,
+      telefono: account.telefono,
+      roles: account.roles.map((r) => r.role),
+      apaterno: p?.apaterno ?? null,
+      amaterno: p?.amaterno ?? null,
+      nombres: p?.nombres ?? null,
+      genero: p?.genero ?? null,
+      ocupacion: p?.ocupacion ?? null,
+      gradoEstudios: p?.gradoEstudios ?? null,
+      escuela: p?.escuela ?? null,
+      situacionLaboral: p?.situacionLaboral ?? null,
+      direccion: p?.direccion ?? null,
+      redesSociales: p?.redesSociales ?? null,
+      createdAt: account.createdAt,
+      attendances: account.attendances,
+    };
   }
 
   async exportCsv(): Promise<string> {
-    const users = await this.prisma.user.findMany({
+    const accounts = await this.prisma.account.findMany({
+      where: {
+        roles: { some: { role: Role.ASISTENTE } },
+      },
+      include: { userProfile: true },
       orderBy: { createdAt: 'asc' },
     });
 
@@ -132,10 +195,6 @@ export class UsersAdminService {
       'email',
       'telefono',
       'redesSociales',
-      'calle',
-      'colonia',
-      'cp',
-      'municipio',
       'genero',
       'ocupacion',
       'gradoEstudios',
@@ -144,25 +203,27 @@ export class UsersAdminService {
       'fechaRegistro',
     ];
 
-    const rows = users.map((u) => [
-      escapeCsvValue(u.id),
-      escapeCsvValue(u.apaterno),
-      escapeCsvValue(u.amaterno),
-      escapeCsvValue(u.nombres),
-      escapeCsvValue(u.email),
-      escapeCsvValue(u.telefono),
-      escapeCsvValue(u.redesSociales),
-      escapeCsvValue(u.calle),
-      escapeCsvValue(u.colonia),
-      escapeCsvValue(u.cp),
-      escapeCsvValue(u.municipio),
-      escapeCsvValue(u.genero),
-      escapeCsvValue(u.ocupacion),
-      escapeCsvValue(u.gradoEstudios),
-      escapeCsvValue(u.escuela),
-      escapeCsvValue(u.situacionLaboral),
-      escapeCsvValue(u.createdAt.toISOString()),
-    ].join(','));
+    const rows = accounts.map((a) => {
+      const p = a.userProfile;
+      const redesSociales = p?.redesSociales
+        ? JSON.stringify(p.redesSociales)
+        : '';
+      return [
+        escapeCsvValue(a.id),
+        escapeCsvValue(p?.apaterno),
+        escapeCsvValue(p?.amaterno),
+        escapeCsvValue(p?.nombres),
+        escapeCsvValue(a.email),
+        escapeCsvValue(a.telefono),
+        escapeCsvValue(redesSociales),
+        escapeCsvValue(p?.genero),
+        escapeCsvValue(p?.ocupacion),
+        escapeCsvValue(p?.gradoEstudios),
+        escapeCsvValue(p?.escuela),
+        escapeCsvValue(p?.situacionLaboral),
+        escapeCsvValue(a.createdAt.toISOString()),
+      ].join(',');
+    });
 
     return [headers.join(','), ...rows].join('\n');
   }

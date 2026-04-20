@@ -7,10 +7,9 @@ describe('StatsService', () => {
   let service: StatsService;
 
   const mockPrisma = {
-    user: { count: jest.fn() },
+    accountRole: { count: jest.fn() },
     event: { count: jest.fn(), findUnique: jest.fn() },
     attendance: { count: jest.fn() },
-    ponente: { count: jest.fn() },
     ponencia: { findFirst: jest.fn() },
     response: { count: jest.fn() },
   };
@@ -29,10 +28,12 @@ describe('StatsService', () => {
 
   describe('getGlobal', () => {
     it('retorna las 4 métricas globales en paralelo', async () => {
-      mockPrisma.user.count.mockResolvedValue(100);
+      // accountRole.count is called twice: once for ASISTENTE, once for PONENTE
+      mockPrisma.accountRole.count
+        .mockResolvedValueOnce(100) // totalUsuarios (ASISTENTE)
+        .mockResolvedValueOnce(10); // totalPonentes (PONENTE)
       mockPrisma.event.count.mockResolvedValue(5);
       mockPrisma.attendance.count.mockResolvedValue(200);
-      mockPrisma.ponente.count.mockResolvedValue(10);
 
       const result = await service.getGlobal();
 
@@ -44,6 +45,9 @@ describe('StatsService', () => {
       });
       // Filtra solo eventos no eliminados
       expect(mockPrisma.event.count).toHaveBeenCalledWith({ where: { eliminado: false } });
+      // Counts via AccountRole
+      expect(mockPrisma.accountRole.count).toHaveBeenCalledWith({ where: { role: 'ASISTENTE' } });
+      expect(mockPrisma.accountRole.count).toHaveBeenCalledWith({ where: { role: 'PONENTE' } });
     });
   });
 
