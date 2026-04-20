@@ -43,35 +43,10 @@ export class EventsGateway implements OnModuleInit, OnModuleDestroy {
     });
   }
 
-  /**
-   * Broadcast a post-created event
-   */
-  broadcastPostCreated(post: any): void {
-    this.broadcast({
-      type: 'post.created',
-      data: post,
-    });
-  }
-
-  /**
-   * Broadcast a post-updated event
-   */
-  broadcastPostUpdated(post: any): void {
-    this.broadcast({
-      type: 'post.updated',
-      data: post,
-    });
-  }
-
-  /**
-   * Broadcast a comment-created event
-   */
-  broadcastCommentCreated(comment: any): void {
-    this.broadcast({
-      type: 'comment.created',
-      data: comment,
-    });
-  }
+  // Forum feature (uncomment when Post/Comment models are added)
+  // broadcastPostCreated(post: any): void { ... }
+  // broadcastPostUpdated(post: any): void { ... }
+  // broadcastCommentCreated(comment: any): void { ... }
 
   /**
    * Register a client for SSE

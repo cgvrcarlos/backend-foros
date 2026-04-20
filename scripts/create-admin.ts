@@ -2,7 +2,7 @@ import * as readline from 'readline';
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
-const SALT_ROUNDS = 12;
+const SALT_ROUNDS = 10;
 
 function prompt(rl: readline.Interface, question: string): Promise<string> {
   return new Promise(resolve => rl.question(question, resolve));
@@ -65,19 +65,37 @@ async function main() {
   const prisma = new PrismaClient();
 
   try {
-    const existing = await prisma.admin.findUnique({ where: { email } });
+    const existing = await prisma.account.findUnique({ where: { email } });
     if (existing) {
-      console.error(`\n❌ Ya existe un admin con el email: ${email}`);
-      process.exit(1);
+      // Check if the account already has ADMIN role
+      const hasAdmin = await prisma.accountRole.findUnique({
+        where: { accountId_role: { accountId: existing.id, role: 'ADMIN' } },
+      });
+      if (hasAdmin) {
+        console.error(`\n❌ Ya existe un admin con el email: ${email}`);
+        process.exit(1);
+      }
     }
 
     const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
-    const admin = await prisma.admin.create({
-      data: { email, password: hashedPassword, nombre, role: 'ADMIN' },
-      select: { id: true, email: true, nombre: true, role: true },
+
+    const account = await prisma.$transaction(async (tx) => {
+      const acc = existing ?? await tx.account.create({
+        data: { email, password: hashedPassword, nombre },
+      });
+
+      await tx.accountRole.create({
+        data: { accountId: acc.id, role: 'ADMIN' },
+      });
+
+      await tx.adminProfile.create({
+        data: { accountId: acc.id, nivel: 'STANDARD' },
+      });
+
+      return acc;
     });
 
-    console.log(`\n✅ Admin creado: ${admin.email} (id: ${admin.id})`);
+    console.log(`\n✅ Admin creado: ${account.email} (id: ${account.id})`);
   } finally {
     await prisma.$disconnect();
   }

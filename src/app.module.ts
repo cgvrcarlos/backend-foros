@@ -15,6 +15,7 @@ import { SurveysModule } from './surveys/surveys.module';
 import { AttendanceModule } from './attendance/attendance.module';
 import { StatsModule } from './stats/stats.module';
 import { UsersAdminModule } from './users-admin/users-admin.module';
+import { AccountsModule } from './accounts/accounts.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { UsersAdminModule } from './users-admin/users-admin.module';
     AttendanceModule,
     StatsModule,
     UsersAdminModule,
+    AccountsModule,
     HealthModule,
   ],
   controllers: [AppController],
