@@ -1,11 +1,14 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { JwtService as NestJwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
+import { Role } from '@prisma/client';
+
+export { Role };
 
 export interface JwtPayload {
   sub: string;
   email: string;
-  role: 'USER' | 'ADMIN' | 'PONENTE';
+  roles: Role[];
 }
 
 @Injectable()

@@ -23,7 +23,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
 
   async validate(payload: JwtStrategyPayload): Promise<JwtPayload> {
     this.logger.debug(`Validating JWT for user: ${payload.sub}`);
-    
+
     if (!payload.sub || !payload.email) {
       this.logger.warn('Invalid JWT payload - missing required fields');
       throw new UnauthorizedException('Invalid token');
@@ -32,7 +32,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return {
       sub: payload.sub,
       email: payload.email,
-      role: payload.role,
+      roles: Array.isArray(payload.roles) ? payload.roles : [],
     };
   }
 }

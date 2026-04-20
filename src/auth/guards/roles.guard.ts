@@ -1,5 +1,6 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
+import { Role } from '@prisma/client';
 
 export const Roles = (...roles: string[]) => {
   const decorator = (target: any, key?: string, descriptor?: any) => {
@@ -14,13 +15,18 @@ export class RolesGuard implements CanActivate {
   constructor(private reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const roles = this.reflector.get<string[]>('roles', context.getHandler());
-    if (!roles || roles.length === 0) return true;
+    const requiredRoles = this.reflector.get<string[]>('roles', context.getHandler());
+    if (!requiredRoles || requiredRoles.length === 0) return true;
 
     const request = context.switchToHttp().getRequest();
     const user = request.user;
 
-    if (!user || !roles.includes(user.role)) {
+    if (!user || !Array.isArray(user.roles)) {
+      throw new ForbiddenException('No tenés permisos para esta acción');
+    }
+
+    const allowed = requiredRoles.some((r) => (user.roles as Role[]).includes(r as Role));
+    if (!allowed) {
       throw new ForbiddenException('No tenés permisos para esta acción');
     }
     return true;
