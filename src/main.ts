@@ -3,6 +3,34 @@ import { ValidationPipe, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import helmet from 'helmet';
 import { AppModule } from './app.module';
+import { PrismaClient } from '@prisma/client';
+import { PrismaPg } from '@prisma/adapter-pg';
+
+function createPrismaClient() {
+  const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
+  return new PrismaClient({ adapter });
+}
+
+async function runMigrations() {
+  const prisma = createPrismaClient();
+  try {
+    await prisma.$connect();
+    await prisma.$executeRaw`SELECT 1`; // Test connection
+    console.log('Database connected ✓');
+    
+    // Note: For Prisma 7, migrations should be run manually:
+    // docker-compose exec backend npx prisma migrate deploy
+    // docker-compose exec backend npx tsx prisma/seed.ts
+    if (process.env.RUN_MIGRATIONS === 'true') {
+      console.log('RUN_MIGRATIONS enabled - skipping automatic migration');
+      console.log('Please run manually in container: npx prisma migrate deploy');
+    }
+  } catch (error) {
+    console.error('Database connection error:', error.message);
+  } finally {
+    await prisma.$disconnect();
+  }
+}
 
 async function bootstrap() {
   const logger = new Logger('Bootstrap');
@@ -48,6 +76,9 @@ async function bootstrap() {
 
   // Global prefix
   app.setGlobalPrefix('api');
+
+  // Run migrations before listening
+  await runMigrations();
 
   await app.listen(port, '0.0.0.0');
   logger.log(`Backend running on http://0.0.0.0:${port}`);

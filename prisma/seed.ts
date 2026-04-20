@@ -1,16 +1,19 @@
 import { PrismaClient, Role, AdminLevel } from '@prisma/client';
-import { PrismaPg } from '@prisma/adapter-pg';
 import * as bcrypt from 'bcryptjs';
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL! });
-const prisma = new PrismaClient({ adapter });
+const prisma = new PrismaClient();
 
 const SALT_ROUNDS = 10;
+
+const ADMIN_EMAIL     = process.env.SEED_ADMIN_EMAIL     ?? 'admin@eventpass.com';
+const ADMIN_PASSWORD  = process.env.SEED_ADMIN_PASSWORD  ?? 'Admin1234!';
+const PONENTE_EMAIL   = process.env.SEED_PONENTE_EMAIL   ?? 'ponente@eventpass.com';
+const PONENTE_PASSWORD = process.env.SEED_PONENTE_PASSWORD ?? 'Ponente1234!';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function seedAdmin() {
-  const email = 'admin@eventpass.com';
+  const email = ADMIN_EMAIL;
 
   const existing = await prisma.account.findUnique({ where: { email } });
   if (existing) {
@@ -18,7 +21,7 @@ async function seedAdmin() {
     return;
   }
 
-  const password = await bcrypt.hash('Admin1234!', SALT_ROUNDS);
+  const password = await bcrypt.hash(ADMIN_PASSWORD, SALT_ROUNDS);
 
   await prisma.$transaction(async (tx) => {
     const account = await tx.account.create({
@@ -42,7 +45,7 @@ async function seedAdmin() {
 }
 
 async function seedPonente() {
-  const email = 'ponente@eventpass.com';
+  const email = PONENTE_EMAIL;
 
   const existing = await prisma.account.findUnique({ where: { email } });
   if (existing) {
@@ -50,7 +53,7 @@ async function seedPonente() {
     return;
   }
 
-  const password = await bcrypt.hash('Ponente1234!', SALT_ROUNDS);
+  const password = await bcrypt.hash(PONENTE_PASSWORD, SALT_ROUNDS);
 
   await prisma.$transaction(async (tx) => {
     const account = await tx.account.create({
@@ -98,7 +101,7 @@ async function seedEvento() {
 async function seedPonencia(eventoId: string) {
   // The ponencia references the ponente Account — look it up first
   const ponenteAccount = await prisma.account.findUnique({
-    where: { email: 'ponente@eventpass.com' },
+    where: { email: PONENTE_EMAIL },
   });
 
   if (!ponenteAccount) {
@@ -182,8 +185,8 @@ async function main() {
   await seedEncuesta(evento.id);
 
   console.log('\nSeed completado exitosamente');
-  console.log('Admin:   admin@eventpass.com');
-  console.log('Ponente: ponente@eventpass.com');
+  console.log(`Admin:   ${ADMIN_EMAIL}`);
+  console.log(`Ponente: ${PONENTE_EMAIL}`);
 }
 
 main()
