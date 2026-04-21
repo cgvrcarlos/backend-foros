@@ -7,6 +7,7 @@ import {
   Request,
   HttpCode,
   HttpStatus,
+  Logger,
 } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { AuthService } from './auth.service';
@@ -15,6 +16,8 @@ import { LoginDto } from './dto/login.dto';
 import { RefreshDto } from './dto/refresh.dto';
 import { Public } from './decorators/public.decorator';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
+
+const logger = new Logger('AuthController');
 
 @Controller('auth')
 export class AuthController {
@@ -46,7 +49,21 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @Get('me')
   async me(@Request() req: any) {
+    logger.log(`[me] Called - user.sub: ${req.user?.sub}, roles: ${req.user?.roles}`);
     return this.authService.getMe(req.user.sub);
+  }
+
+  // Debug endpoint - remove in production
+  @Public()
+  @Get('debug')
+  async debug(@Request() req: any) {
+    const user = req.user;
+    logger.log(`[debug] auth header: ${req.headers.authorization ? 'YES' : 'NO'}, user: ${JSON.stringify(user)}`);
+    return {
+      message: 'Debug endpoint working',
+      receivedToken: !!req.headers.authorization,
+      userFromToken: user ? { sub: user.sub, roles: user.roles, email: user.email } : null,
+    };
   }
 
   @UseGuards(JwtAuthGuard)
