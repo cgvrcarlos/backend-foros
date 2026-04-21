@@ -10,6 +10,7 @@ import {
 import type { Request } from 'express';
 import { AttendanceService } from './attendance.service';
 import { ConfirmAttendanceDto } from './dto/confirm-attendance.dto';
+import { VerifyAttendanceDto } from './dto/verify-attendance.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard, Roles } from '../auth/guards/roles.guard';
 
@@ -32,6 +33,18 @@ export class AttendanceController {
   @Roles('ASISTENTE', 'ADMIN')
   confirm(@Req() req: AuthenticatedRequest, @Body() dto: ConfirmAttendanceDto) {
     return this.attendanceService.confirm(req.user.sub, dto);
+  }
+
+  @Post('verify')
+  @Roles('ADMIN', 'STAFF')
+  verify(@Req() req: AuthenticatedRequest, @Body() dto: VerifyAttendanceDto) {
+    return this.attendanceService.verify(dto, req.user.sub);
+  }
+
+  @Get('my')
+  @Roles('ASISTENTE', 'ADMIN')
+  getMyAttendances(@Req() req: AuthenticatedRequest) {
+    return this.attendanceService.getMyAttendances(req.user.sub);
   }
 
   @Get('event/:eventId')

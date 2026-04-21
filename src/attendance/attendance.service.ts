@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ConfirmAttendanceDto } from './dto/confirm-attendance.dto';
+import { VerifyAttendanceDto } from './dto/verify-attendance.dto';
 
 @Injectable()
 export class AttendanceService {
@@ -120,7 +121,9 @@ export class AttendanceService {
       select: {
         id: true,
         tipoAsistencia: true,
+        status: true,
         confirmedAt: true,
+        verifiedAt: true,
         qrCode: true,
         account: {
           select: {
@@ -144,7 +147,9 @@ export class AttendanceService {
     return attendances.map((att) => ({
       id: att.id,
       tipoAsistencia: att.tipoAsistencia,
+      status: att.status,
       confirmedAt: att.confirmedAt,
+      verifiedAt: att.verifiedAt,
       qrCode: att.qrCode,
       user: {
         nombres: att.account?.userProfile?.nombres ?? att.account?.nombre ?? null,
@@ -154,6 +159,70 @@ export class AttendanceService {
         telefono: att.account?.telefono ?? null,
       },
     }));
+  }
+
+  async verify(dto: VerifyAttendanceDto, verifierId: string) {
+    const attendance = await this.prisma.attendance.findUnique({
+      where: { qrCode: dto.qrCode },
+      select: {
+        id: true,
+        eventId: true,
+        status: true,
+        account: { select: { nombre: true, email: true } },
+      },
+    });
+
+    if (!attendance) {
+      throw new NotFoundException('QR no encontrado');
+    }
+
+    if (attendance.eventId !== dto.eventId) {
+      throw new BadRequestException('El QR no corresponde a este evento');
+    }
+
+    if (attendance.status !== 'CONFIRMADO') {
+      throw new ConflictException('Este QR ya fue verificado');
+    }
+
+    const updated = await this.prisma.attendance.update({
+      where: { id: attendance.id },
+      data: {
+        status: dto.attended ? 'ASISTIO' : 'NO_ASISTIO',
+        verifiedAt: new Date(),
+      },
+      select: {
+        id: true,
+        status: true,
+        verifiedAt: true,
+        account: { select: { nombre: true, email: true } },
+      },
+    });
+
+    return updated;
+  }
+
+  async getMyAttendances(userId: string) {
+    return this.prisma.attendance.findMany({
+      where: { userId },
+      select: {
+        id: true,
+        qrCode: true,
+        status: true,
+        tipoAsistencia: true,
+        confirmedAt: true,
+        verifiedAt: true,
+        event: {
+          select: {
+            id: true,
+            titulo: true,
+            fechaHora: true,
+            ubicacionPresencial: true,
+            linkVirtual: true,
+          },
+        },
+      },
+      orderBy: { confirmedAt: 'desc' },
+    });
   }
 
   async getQr(attendanceId: string, userId: string, roles: string[]) {

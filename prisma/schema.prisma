@@ -59,6 +59,13 @@ enum Role {
   ADMIN
   PONENTE
   ASISTENTE
+  STAFF
+}
+
+enum AttendanceStatus {
+  CONFIRMADO
+  ASISTIO
+  NO_ASISTIO
 }
 
 enum AdminLevel {
@@ -231,12 +238,14 @@ model Question {
 
 // Confirmación de asistencia
 model Attendance {
-  id             String         @id @default(cuid())
+  id             String           @id @default(cuid())
   userId         String
   eventId        String
-  tipoAsistencia TipoAsistencia @default(PRESENCIAL)
-  qrCode         String         @unique
-  confirmedAt    DateTime       @default(now())
+  tipoAsistencia TipoAsistencia   @default(PRESENCIAL)
+  status         AttendanceStatus @default(CONFIRMADO)
+  qrCode         String           @unique
+  confirmedAt    DateTime         @default(now())
+  verifiedAt     DateTime?
 
   // Relations
   account  Account   @relation(fields: [userId], references: [id], onDelete: Cascade)
